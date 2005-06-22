@@ -1,4 +1,4 @@
-/* $Id: XS.xs 2 2005-06-19 08:46:15Z daisuke $
+/* $Id: XS.xs 5 2005-06-22 03:22:17Z daisuke $
  *
  * Daisuke Maki <dmaki@cpan.org>
  * All rights reserved.
@@ -167,9 +167,22 @@ typedef struct _fmmagic {
     char desc[MAXDESC];     /* description */
 } fmmagic;
 
+#if 0
+#define EXTSIZ 5
+typedef struct _fmmext {
+    char ext[EXTSIZ];
+    char mime[MAXMIMESTRING];
+    _fmmext *next;
+} fmmext;
+#endif
+
 typedef struct _fmmstate {
     fmmagic *magic;
     fmmagic *last;
+#if 0
+    fmext   *ext;
+#endif
+    char    *error;
 } fmmstate;
 
 /*
@@ -248,7 +261,7 @@ static char *types[] =
     "text/plain",		/* "English text", */
     "text/plain",		/* "pascal program text", */
     "message/rfc822",		/* "mail text", */
-    "message/news",		/* "news text", */
+    "message/news",		    /* "news text", */
     "application/binary",	/* "can't happen error on names.h/types", */
     0
 };
@@ -422,6 +435,7 @@ static
 void fmm_init_state(fmmstate *state)
 {
     state->magic = NULL;
+    state->error = NULL;
 }
 
 static
@@ -468,6 +482,15 @@ get_fmmstate_hv(pTHX_ SV *sv)
     return NULL;
 }
 
+static void
+fmm_error(fmmstate *state, char *errstr)
+{
+    if (state->error) { /* previous error */
+        SAFE_FREE(state->error);
+    }
+    state->error = errstr;
+}
+
 static int
 magic_fmm_free_state(pTHX_ SV *self, MAGIC *mg)
 {
@@ -484,17 +507,19 @@ vtbl_fmm_free_state = { 0, 0 , 0, 0, MEMBER_TO_FPTR(magic_fmm_free_state) };
 /* append string to an existing buffer, using printf fashion */
 /* Will refuse to append anything after MAXMIMESTRING into dst*/
 static void
-fmm_append_buf(char **dst, char *str, ...)
+fmm_append_buf(fmmstate *state, char **dst, char *str, ...)
 {
     va_list ap;
     char buf[MAXMIMESTRING];
+    char *errstr;
 
     va_start(ap, str);
     vsnprintf(buf, sizeof(buf), str, ap);
     va_end(ap);
 
     if (strlen(buf) + 1 > MAXMIMESTRING - strlen(*dst)) {
-        fprintf(stderr, "detected truncation in fmm_append_buf. refusing to append\n");
+        asprintf(&errstr, "detected truncation in fmm_append_buf. refusing to append");
+        fmm_error(state, errstr);
         return;
     }
 #ifdef FMM_DEBUG
@@ -511,9 +536,10 @@ fmm_append_buf(char **dst, char *str, ...)
  * Convert the byte order of the data we are looking at
  */
 static int 
-fmm_mconvert(union VALUETYPE *p, fmmagic *m)
+fmm_mconvert(fmmstate *state, union VALUETYPE *p, fmmagic *m)
 {
     char *rt;
+    char *errstr;
 
     switch (m->type) {
         case BYTE:
@@ -544,13 +570,14 @@ fmm_mconvert(union VALUETYPE *p, fmmagic *m)
                 ((p->hl[3] << 24) | (p->hl[2] << 16) | (p->hl[1] << 8) | (p->hl[0]));
             return 1;
         default:
-            fprintf(stderr, "fmm_mconvert : invalid type %d in mconvert().", m->type);
+            asprintf(&errstr, "fmm_mconvert : invalid type %d in mconvert().", m->type);
+            fmm_error(state, errstr);
             return 0;
     }
 }
 
 static int
-fmm_mget(union VALUETYPE *p, unsigned char *s, fmmagic *m, size_t nbytes, char **mime_type)
+fmm_mget(fmmstate *state, union VALUETYPE *p, unsigned char *s, fmmagic *m, size_t nbytes, char **mime_type)
 {
     long offset = m->offset;
 
@@ -560,7 +587,7 @@ fmm_mget(union VALUETYPE *p, unsigned char *s, fmmagic *m, size_t nbytes, char *
 
     memcpy(p, s + offset, sizeof(union VALUETYPE));
 
-    if (!fmm_mconvert(p, m)) {
+    if (!fmm_mconvert(state, p, m)) {
         return 0;
     }
 
@@ -582,7 +609,7 @@ fmm_mget(union VALUETYPE *p, unsigned char *s, fmmagic *m, size_t nbytes, char *
     
         memcpy(p, s + offset, sizeof(union VALUETYPE));
     
-        if (!fmm_mconvert(p, m)) {
+        if (!fmm_mconvert(state, p, m)) {
             return 0;
         }
     }
@@ -622,15 +649,17 @@ fmm_slurp_fh(FILE *fhandle, char **data, int *size)
 }
 
 static int
-fmm_slurp_file(char *file, char **data, int *size)
+fmm_slurp_file(fmmstate *state, char *file, char **data, int *size)
 {
     FILE *fhandle;
     int   datasize;
     int   ret;
+    char *errstr;
     
     fhandle = fopen(file, "r");
     if (! fhandle) {
-        fprintf(stderr, "Failed to open %s: %s", file, strerror(errno));
+        asprintf(&errstr, "Failed to open %s: %s", file, strerror(errno));
+        fmm_error(state, errstr);
         return -1;
     }
     ret = fmm_slurp_fh(fhandle, data, size);
@@ -725,8 +754,10 @@ is_tar(unsigned char *buf, size_t nbytes)
  * extend the sign bit if the comparison is to be signed
  */
 static unsigned long 
-fmm_signextend(fmmagic *m, unsigned long v)
+fmm_signextend(fmmstate *state, fmmagic *m, unsigned long v)
 {
+    char *errstr;
+
     if (!(m->flag & UNSIGNED))
     switch (m->type) {
         /*
@@ -752,18 +783,20 @@ fmm_signextend(fmmagic *m, unsigned long v)
     case STRING:
         break;
     default:
-        fprintf(stderr, "fmm_signextend: can;t happen: m->type=%s\n", m->type);
+        asprintf(&errstr, "fmm_signextend: can;t happen: m->type=%s\n", m->type);
+        fmm_error(state, errstr);
         return -1;
     }
     return v;
 }
 
 static void
-fmm_append_mime(char **buf, union VALUETYPE *p, fmmagic *m)
+fmm_append_mime(fmmstate *state, char **buf, union VALUETYPE *p, fmmagic *m)
 {
     char *pp;
     unsigned long v;
     char *time_str;
+    char *errstr;
 
 #ifdef FMM_DEBUG
     fprintf(stderr, "fmm_append_mime: buf = %s\n", buf);
@@ -779,9 +812,9 @@ fmm_append_mime(char **buf, union VALUETYPE *p, fmmagic *m)
             break;
         case STRING:
             if (m->reln == '=') {
-                fmm_append_buf(buf, m->desc, m->value.s);
+                fmm_append_buf(state, buf, m->desc, m->value.s);
             } else {
-                fmm_append_buf(buf, m->desc, p->s);
+                fmm_append_buf(state, buf, m->desc, p->s);
             }
             return;
         case DATE:
@@ -791,20 +824,21 @@ fmm_append_mime(char **buf, union VALUETYPE *p, fmmagic *m)
             strftime(time_str, CTIME_LEN, CTIME_FMT,
                 localtime((const time_t *) &p->l));
             pp = time_str;
-            fmm_append_buf(buf, m->desc, pp);
+            fmm_append_buf(state, buf, m->desc, pp);
             SAFE_FREE(time_str);
             return;
         default:
-            fprintf(stderr, "fmm_append_mime: invalud m->type (%d) in fmm_append_mime().\n", m->type);
+            asprintf(&errstr, "fmm_append_mime: invalud m->type (%d) in fmm_append_mime().\n", m->type);
+            fmm_error(state, errstr);
             return;
     }
 
-    v = fmm_signextend(m, v) & m->mask;
-    fmm_append_buf(buf, m->desc, (unsigned long) v);
+    v = fmm_signextend(state, m, v) & m->mask;
+    fmm_append_buf(state, buf, m->desc, (unsigned long) v);
 }
 
 static int
-fmm_mcheck(union VALUETYPE *p, fmmagic *m)
+fmm_mcheck(fmmstate *state, union VALUETYPE *p, fmmagic *m)
 {
     register unsigned long l = m->value.l;
     register unsigned long v;
@@ -812,6 +846,7 @@ fmm_mcheck(union VALUETYPE *p, fmmagic *m)
     register unsigned char *b;
     register int len;
     int matched;
+    char *errstr;
 
     if ((m->value.s[0] == 'x') && (m->value.s[1] == '\0')) {
         /* XXX - WTF does this mean?? */
@@ -857,11 +892,12 @@ fmm_mcheck(union VALUETYPE *p, fmmagic *m)
             break;
         default:
             /* bogosity, pretend that it just wan't a match*/
-            fprintf(stderr, "fmm_mcheck: invalid type %d in mcheck().\n", m->type);
+            asprintf(&errstr, "fmm_mcheck: invalid type %d in mcheck().\n", m->type);
+            fmm_error(state, errstr);
             return 0;
     }
 
-    v = fmm_signextend(m, v) & m->mask;
+    v = fmm_signextend(state, m, v) & m->mask;
 
     switch (m->reln) {
         case 'x':
@@ -896,7 +932,8 @@ fmm_mcheck(union VALUETYPE *p, fmmagic *m)
         default:
             /* bogosity, pretend it didn't match */
             matched = 0;
-            fprintf(stderr, "fmm_mcheck: Can't happen: invalid relation %d.\n", m->reln);
+            asprintf(&errstr, "fmm_mcheck: Can't happen: invalid relation %d.\n", m->reln);
+            fmm_error(state, errstr);
     }
     return matched;
 }
@@ -922,18 +959,20 @@ fmm_hextoint(int c)
  * *slen. Return updated scan pointer as function result.
  */
 static char *
-fmm_getstr(register char *s, register char *p, int plen, int *slen)
+fmm_getstr(fmmstate *state, register char *s, register char *p, int plen, int *slen)
 {
     char *origs = s, *origp = p;
     char *pmax = p + plen - 1;
     register int c;
     register int val;
+    char *errstr;
 
     while ((c = *s++) != '\0') {
     if (isspace(c))
         break;
     if (p >= pmax) {
-        fprintf(stderr, "fmm_getstr: string too long: %s", origs);
+        asprintf(&errstr, "fmm_getstr: string too long: %s", origs);
+        fmm_error(state, errstr);
         break;
     }
     if (c == '\\') {
@@ -1034,16 +1073,16 @@ fmm_getstr(register char *s, register char *p, int plen, int *slen)
  * pointer, according to the magic type.  Update the string pointer to point
  * just after the number read.  Return 0 for success, non-zero for failure.
  */
-static int fmm_getvalue(fmmagic *m, char **p)
+static int fmm_getvalue(fmmstate *state, fmmagic *m, char **p)
 {
     int slen;
 
     if (m->type == STRING) {
-        *p = fmm_getstr(*p, m->value.s, sizeof(m->value.s), &slen);
+        *p = fmm_getstr(state, *p, m->value.s, sizeof(m->value.s), &slen);
         m->vallen = slen;
     }
     else if (m->reln != 'x')
-        m->value.l = fmm_signextend(m, strtol(*p, p, 0));
+        m->value.l = fmm_signextend(state, m, strtol(*p, p, 0));
     return 0;
 }
 
@@ -1197,7 +1236,7 @@ fmm_parse_magic_line(fmmstate *state, char *l, int lineno)
     /* New-style anding: "0 byte&0x80 =0x80 dynamically linked" */
     if (*l == '&') {
         ++l;
-        m->mask = fmm_signextend(m, strtol(l, &l, 0));
+        m->mask = fmm_signextend(state, m, strtol(l, &l, 0));
     }
     else {
         m->mask = ~0L;
@@ -1232,7 +1271,7 @@ fmm_parse_magic_line(fmmstate *state, char *l, int lineno)
     }
     EATAB(l);
     
-    if (fmm_getvalue(m, &l))
+    if (fmm_getvalue(state, m, &l))
         return -1;
 
     /*
@@ -1259,18 +1298,20 @@ GetDesc:
 }
 
 /* maps to mod_mime_magic::apprentice */
-static
-int fmm_parse_magic_file(fmmstate *state, char *file)
+static int
+fmm_parse_magic_file(fmmstate *state, char *file)
 {
     int   ws_offset;
     int   lineno;
     int   errs;
     char  line[BUFSIZ + 1];
     FILE *fhandle;
+    char *errstr;
 
     fhandle = fopen(file, "r");
     if (! fhandle) {
-        fprintf(stderr, "Failed to open %s: %s", file, strerror(errno));
+        asprintf(&errstr, "Failed to open %s: %s", file, strerror(errno));
+        fmm_error(state, errstr);
         return -1;
     }
 
@@ -1322,8 +1363,10 @@ int fmm_parse_magic_file(fmmstate *state, char *file)
 #define EMPTY_MAGIC_TYPE  "x-system/x-unix;  empty"
 #define BROKEN_SYMLINK_MAGIC_TYPE "x-system/x-unix;  broken symlink"
 static int
-fmm_fsmagic_stat(struct stat *sb, char **mime_type)
+fmm_fsmagic_stat(fmmstate *state, struct stat *sb, char **mime_type)
 {
+    char *errstr;
+
     if (sb->st_mode & S_IFREG) {
         /* Regular file. Need to check for emptiness */
         if (sb->st_size == 0) {
@@ -1351,7 +1394,8 @@ fmm_fsmagic_stat(struct stat *sb, char **mime_type)
         strcpy(*mime_type, SOCKET_MAGIC_TYPE);
     } else {
         /* Unknown type? */
-        fprintf(stderr, "fmm_fsmagic: invalid file type");
+        asprintf(&errstr, "fmm_fsmagic: invalid file type");
+        fmm_error(state, errstr);
         return -1;
     }
 
@@ -1359,15 +1403,41 @@ fmm_fsmagic_stat(struct stat *sb, char **mime_type)
 }
 
 static int
-fmm_fsmagic(char *filename, char **mime_type)
+fmm_fsmagic(fmmstate *state, char *filename, char **mime_type)
 {
     struct stat sb;
-    if (stat(filename, &sb) != 0) {
-        fprintf(stderr, "Failed to stat file %s\n", filename);
+    char *errstr;
+    char *p;
+
+    if (stat(filename, &sb) == -1) {
+        asprintf(&errstr, "Failed to stat file %s: %s", filename, strerror(errno));
+        fmm_error(state, errstr);
         return -1;
     }
 
-    return fmm_fsmagic_stat(&sb, mime_type);
+    if (fmm_fsmagic_stat(state, &sb, mime_type) == 0) {
+        return 0;
+    }
+
+#if 0
+    /* If it's a regular file, look at the file extension */
+    if (sb->st_mode & S_IFREG) {
+        for (ext = state->ext; ext ;  ext = ext->next) {
+            fn_len  = strlen(filename)
+            ext_len = strlen(ext->extension);
+
+            if (strlen > ext_len) {
+                p = filename + fn_len - ext_len;
+                if (STREQ(p, ext_len)) {
+                    *mime_type = (char *) malloc(sizeof(char) * strlen(ext->mime));
+                    memcpy(*mime_type, ext->mime, strlen(ext->mime));
+                    return 0;
+                }
+            }
+        }
+    }
+#endif
+    return 1;
 }
 
 /* an optimization over plain strcmp() */
@@ -1445,7 +1515,7 @@ fmm_ascmagic(unsigned char *buf, size_t nbytes, char **mime_type)
 }
 
 static int
-fmm_softmagic(fmmagic *m, char **buf, int size, char **mime_type)
+fmm_softmagic(fmmstate *state, fmmagic *m, char **buf, int size, char **mime_type)
 {
     int cont_level = 0;
     int need_separator = 0;
@@ -1455,7 +1525,7 @@ fmm_softmagic(fmmagic *m, char **buf, int size, char **mime_type)
 
     for (; m; m = m->next) {
         /* check if main entry matches */
-        if (! fmm_mget(&p, *buf, m, size, mime_type) || !fmm_mcheck(&p, m)) {
+        if (! fmm_mget(state, &p, *buf, m, size, mime_type) || !fmm_mcheck(state, &p, m)) {
             /* main entry didn't match, flush its continuations */
             if (! m->next || (m->next->cont_level == 0)) {
                 continue;
@@ -1475,7 +1545,7 @@ fmm_softmagic(fmmagic *m, char **buf, int size, char **mime_type)
         /* this will be the last run through the loop */
 
         /* print the match */
-        fmm_append_mime(mime_type, &p, m);
+        fmm_append_mime(state, mime_type, &p, m);
 
         /* if we printed something, we'll need to print a blank before
          * we print something else */
@@ -1495,7 +1565,7 @@ fmm_softmagic(fmmagic *m, char **buf, int size, char **mime_type)
                     cont_level = m->cont_level;
                 }
 
-                if (fmm_mget(&p, *buf, m, size, mime_type) && fmm_mcheck(&p, m)) {
+                if (fmm_mget(state, &p, *buf, m, size, mime_type) && fmm_mcheck(state, &p, m)) {
                     /* This continuation matched. Print its message, with a
                      * blank before it if the previous item printed and this
                      * isn't empty.
@@ -1503,10 +1573,10 @@ fmm_softmagic(fmmagic *m, char **buf, int size, char **mime_type)
                     /* space if previous printed */
                     if (need_separator && (m->nospflag == 0) && (m->desc[0] != '\0')) {
                         /* putchar  ' ' */
-                        fmm_append_buf(mime_type, " ");
+                        fmm_append_buf(state, mime_type, " ");
                         need_separator = 0;
                     }
-                    fmm_append_mime(mime_type, &p, m);
+                    fmm_append_mime(state, mime_type, &p, m);
                     if (m->desc[0]) 
                         need_separator = 1;
 
@@ -1529,18 +1599,27 @@ fmm_mime_magic(fmmstate *state, char *file, char **mime_type)
 {
     char *data;
     FILE *fhandle;
+    char *errstr;
+    int ret;
 
-    if (fmm_fsmagic(file, mime_type) == 0) {
+    if ((ret = fmm_fsmagic(state, file, mime_type)) == 0) {
         return 0;
+    }
+    if (ret == -1) {
+        return -1;
     }
 
     fhandle = fopen(file, "r");
     if (!fhandle) {
+        asprintf(&errstr, "Failed to open file %s: %s", file, strerror(errno));
+        fmm_error(state, errstr);
         return -1;
     }
 
     data = (char *) malloc(sizeof(char) * (HOWMANY + 1));
     if (! fread(data, sizeof(char), HOWMANY, fhandle)) {
+        asprintf(&errstr, "Failed to read from handle: %s", strerror(errno));
+        fmm_error(state, errstr);
         SAFE_FREE(data);
         return -1;
     }
@@ -1548,12 +1627,12 @@ fmm_mime_magic(fmmstate *state, char *file, char **mime_type)
     if (fhandle)
         fclose(fhandle);
 
-    if (fmm_softmagic(state->magic, &data, HOWMANY, mime_type) == 1) {
+    if (fmm_softmagic(state, state->magic, &data, HOWMANY, mime_type) == 1) {
         SAFE_FREE(data);
         return 0;
     }
 
-    if (fmm_ascmagic(data, HOWMANY, mime_type) == 1) {
+    if (fmm_ascmagic(data, HOWMANY, mime_type) == 0) {
         SAFE_FREE(data);
         return 0;
     }
@@ -1561,6 +1640,48 @@ fmm_mime_magic(fmmstate *state, char *file, char **mime_type)
     SAFE_FREE(data);
     return 1;
 }
+
+#if 0
+SV *
+add_mime_ext(self, ext, mime)
+        SV *self;
+        SV *ext;
+        SV *mime;
+    PREINIT:
+        fmmstate *state;
+        char     *ext_str;
+        char     *mime_str;
+    CODE:
+        state = get_fmmstate_hv(self);
+        fmm_add_mime_ext(state, ext_str, mime);
+    OUTPUT:
+        RETVAL
+
+SV *
+parse_ext_file(self, file)
+        SV *self;
+        SV *file;
+    PREINIT:
+        fmmstate *state;
+        SV       *sv;
+        char     *filename;
+        STRLEN    len;
+    CODE:
+        state = get_fmmstate_hv(self);
+        SAFE_FREE(state->error);
+
+        RETVAL = &PL_sv_undef;
+        if (state) {
+            filename = SvPV(file, len);
+            if (fmm_parse_ext_file(state, filename)) {
+                RETVAL = &PL_sv_yes;
+            }
+        }
+    OUTPUT:
+        RETVAL
+
+
+#endif
 
 MODULE = File::MMagic::XS       PACKAGE = File::MMagic::XS
 
@@ -1605,6 +1726,8 @@ parse_magic_file(self, file)
         STRLEN    len;
     CODE:
         state = get_fmmstate_hv(self);
+        SAFE_FREE(state->error);
+
         RETVAL = &PL_sv_undef;
         if (state) {
             filename = SvPV(file, len);
@@ -1623,13 +1746,16 @@ fsmagic(self, filename)
         char *fn;
         char *type;
         STRLEN len;
+        fmmstate *state;
     CODE:
         fn = SvPV_nolen(filename);
+        state = get_fmmstate_hv(self);
+        SAFE_FREE(state->error);
 
         type = (char *) malloc(sizeof(char) * BUFSIZ);
         *type = '\0';
 
-        if (fmm_fsmagic(fn, &type) == 0) {
+        if (fmm_fsmagic(state, fn, &type) == 0) {
             RETVAL = newSVpv(type, strlen(type));
         } else {
             RETVAL = &PL_sv_undef;
@@ -1646,11 +1772,14 @@ ascmagic(self, data)
         unsigned char *buf;
         char *type;
         STRLEN len;
+        fmmstate *state;
     CODE:
         buf = SvPV(data, len);
         type = (char *) malloc(sizeof(char) * BUFSIZ);
         *type = '\0';
 
+        state = get_fmmstate_hv(self);
+        SAFE_FREE(state->error);
         if (fmm_ascmagic(buf, (size_t) len, &type) == 0) {
             RETVAL = newSVpv(type, strlen(type));
         } else {
@@ -1669,15 +1798,18 @@ ascmagic_file(self, filename)
         char *data;
         char *type;
         int  datasize;
+        fmmstate *state;
     CODE:
         fn = SvPV_nolen(filename);
         type = (char *) malloc(sizeof(char) * BUFSIZ);
         *type = '\0';
 
-        if (fmm_fsmagic(fn, &type) == 0) {
+        state = get_fmmstate_hv(self);
+        SAFE_FREE(state->error);
+        if (fmm_fsmagic(state, fn, &type) == 0) {
             RETVAL = newSVpv(type, strlen(type));
         } else {
-            fmm_slurp_file(fn, &data, &datasize);
+            fmm_slurp_file(state, fn, &data, &datasize);
             if (fmm_ascmagic(data, datasize, &type) == 0) {
                 RETVAL = newSVpv(type, strlen(type));
             } else {
@@ -1702,6 +1834,7 @@ get_mime(self, filename)
         fmmstate *state;
     CODE:
         state = get_fmmstate_hv(self);
+        SAFE_FREE(state->error);
         fn = SvPV_nolen(filename);
         type = (char *) malloc(sizeof(char) * MAXMIMESTRING);
         *type = '\0';
@@ -1714,4 +1847,19 @@ get_mime(self, filename)
         SAFE_FREE(type);
     OUTPUT:
         RETVAL
+
+SV *
+error(self)
+        SV *self;
+    PREINIT:
+        fmmstate *state;
+    CODE:
+        state = get_fmmstate_hv(self);
+        RETVAL = &PL_sv_undef;
+        if (state->error) {
+            RETVAL = newSVpv(state->error, strlen(state->error));
+        }
+    OUTPUT:
+        RETVAL
+
 

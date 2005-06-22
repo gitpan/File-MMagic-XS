@@ -1,4 +1,4 @@
-# $Id: XS.pm 4 2005-06-19 08:54:55Z daisuke $
+# $Id: XS.pm 5 2005-06-22 03:22:17Z daisuke $
 #
 # Daisuke Maki <dmaki@cpan.org>
 # All rights reserved.
@@ -6,7 +6,7 @@
 package File::MMagic::XS;
 use 5.006001;
 use strict;
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 our $MAGIC_FILE = undef;
 
 require XSLoader;
@@ -93,6 +93,10 @@ contents of the file is not inspected.
 
 Inspects a piece of data (assuming it's not binary data), and attempts to
 determine the file type.
+
+=head2 error()
+
+Returns the last error string.
 
 =head1 PERFORMANCE
 
