@@ -1,4 +1,4 @@
-# $Id: XS.pm 5 2005-06-22 03:22:17Z daisuke $
+# $Id: XS.pm 8 2005-06-23 09:10:08Z daisuke $
 #
 # Daisuke Maki <dmaki@cpan.org>
 # All rights reserved.
@@ -6,7 +6,7 @@
 package File::MMagic::XS;
 use 5.006001;
 use strict;
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 our $MAGIC_FILE = undef;
 
 require XSLoader;
@@ -109,6 +109,8 @@ Hey, I told you it's fast...
 =head1 TODO
 
 Add File::MMagic interface compatibility?
+
+Use PerlIO_* abstraction?
 
 =head1 SEE ALSO
 

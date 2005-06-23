@@ -1,4 +1,4 @@
-/* $Id: XS.xs 5 2005-06-22 03:22:17Z daisuke $
+/* $Id: XS.xs 8 2005-06-23 09:10:08Z daisuke $
  *
  * Daisuke Maki <dmaki@cpan.org>
  * All rights reserved.
@@ -113,10 +113,7 @@
 
 #define FMMAGIC_DEBUG 1
 #define EATAB(x) \
-    {while (isspace(*x)) ++x;}
-#define SAFE_FREE(x) \
-    if (x) \
-        free(x)
+    {while (isSPACE(*x)) ++x;}
 #define MAXDESC   50       /* max leng of text description */
 #define MAXstring 64        /* max leng of "string" types */
 /* HOWMANY must be at least 4096 to make gzip -dcq work */
@@ -167,21 +164,9 @@ typedef struct _fmmagic {
     char desc[MAXDESC];     /* description */
 } fmmagic;
 
-#if 0
-#define EXTSIZ 5
-typedef struct _fmmext {
-    char ext[EXTSIZ];
-    char mime[MAXMIMESTRING];
-    _fmmext *next;
-} fmmext;
-#endif
-
 typedef struct _fmmstate {
     fmmagic *magic;
     fmmagic *last;
-#if 0
-    fmext   *ext;
-#endif
     char    *error;
 } fmmstate;
 
@@ -447,9 +432,9 @@ void fmm_free_state(fmmstate *state)
     for (m = state->magic; m; ) {
         md = m;
         m  = m->next;
-        SAFE_FREE(md);
+        Safefree(md);
     }
-    SAFE_FREE(state);
+    Safefree(state);
 }
 
 static fmmstate*
@@ -486,7 +471,7 @@ static void
 fmm_error(fmmstate *state, char *errstr)
 {
     if (state->error) { /* previous error */
-        SAFE_FREE(state->error);
+        Safefree(state->error);
     }
     state->error = errstr;
 }
@@ -629,17 +614,17 @@ fmm_slurp_fh(FILE *fhandle, char **data, int *size)
     pos = ftell(fhandle);
 
     datasize = BUFSIZ * 10;
-    *data = (char *) malloc(sizeof(char) * datasize);
+    Newz(1234, *data, datasize, char);
 
     while ((rbytes = fread(buf, sizeof(char), BUFSIZ, fhandle)) != 0) {
         sofar += rbytes;
         if (datasize < sofar){
-            *data = (char *) realloc(*data, datasize * 2);
+            Renew(*data, datasize * 2, char);
             datasize *= 2;
         }
         strncpy((*data + sofar - rbytes), buf, BUFSIZ);
     }
-    *data = realloc(*data, datasize + 1);
+    Renew(*data, datasize + 1, char);
     (*data)[datasize] = '\0';
     *size = datasize;
 
@@ -660,6 +645,7 @@ fmm_slurp_file(fmmstate *state, char *file, char **data, int *size)
     if (! fhandle) {
         asprintf(&errstr, "Failed to open %s: %s", file, strerror(errno));
         fmm_error(state, errstr);
+        fclose(fhandle);
         return -1;
     }
     ret = fmm_slurp_fh(fhandle, data, size);
@@ -667,7 +653,7 @@ fmm_slurp_file(fmmstate *state, char *file, char **data, int *size)
     return ret;
 }
 
-#define isodigit(c) (((unsigned char)(c) >= '0') && ((unsigned char)(c) <= '7'))
+#define isODIGIT(c) (((unsigned char)(c) >= '0') && ((unsigned char)(c) <= '7'))
 
 /*
  * Quick and dirty octal conversion.
@@ -679,18 +665,18 @@ from_oct(int digs, char *where)
 {
     register long value;
 
-    while (isspace(*where)) {   /* Skip spaces */
+    while (isSPACE(*where)) {   /* Skip spaces */
         where++;
         if (--digs <= 0)
             return -1;      /* All blank field */
     }
     value = 0;
-    while (digs > 0 && isodigit(*where)) {  /* Scan til nonoctal */
+    while (digs > 0 && isODIGIT(*where)) {  /* Scan til nonoctal */
         value = (value << 3) | (*where++ - '0');
         --digs;
     }
 
-    if (digs > 0 && *where && !isspace(*where))
+    if (digs > 0 && *where && !isSPACE(*where))
         return -1;      /* Ended on non-space/nul */
 
     return value;
@@ -820,12 +806,12 @@ fmm_append_mime(fmmstate *state, char **buf, union VALUETYPE *p, fmmagic *m)
         case DATE:
         case BEDATE:
         case LEDATE:
-            time_str = (char *) malloc(sizeof(char) * CTIME_LEN);
+            Newz(1234, time_str, CTIME_LEN, char);
             strftime(time_str, CTIME_LEN, CTIME_FMT,
                 localtime((const time_t *) &p->l));
             pp = time_str;
             fmm_append_buf(state, buf, m->desc, pp);
-            SAFE_FREE(time_str);
+            Safefree(time_str);
             return;
         default:
             asprintf(&errstr, "fmm_append_mime: invalud m->type (%d) in fmm_append_mime().\n", m->type);
@@ -944,7 +930,7 @@ fmm_mcheck(fmmstate *state, union VALUETYPE *p, fmmagic *m)
 static int 
 fmm_hextoint(int c)
 {
-    if (isdigit(c))
+    if (isDIGIT(c))
     return c - '0';
     if ((c >= 'a') && (c <= 'f'))
     return c + 10 - 'a';
@@ -968,7 +954,7 @@ fmm_getstr(fmmstate *state, register char *s, register char *p, int plen, int *s
     char *errstr;
 
     while ((c = *s++) != '\0') {
-    if (isspace(c))
+    if (isSPACE(c))
         break;
     if (p >= pmax) {
         asprintf(&errstr, "fmm_getstr: string too long: %s", origs);
@@ -1094,7 +1080,7 @@ fmm_parse_magic_line(fmmstate *state, char *l, int lineno)
     char    *s;
     fmmagic *m;
 
-    m = (fmmagic *) malloc(sizeof(fmmagic));
+    Newz(1234, m, 1, fmmagic);
     m->next       = NULL;
     m->flag       = 0;
     m->cont_level = 0;
@@ -1261,7 +1247,7 @@ fmm_parse_magic_line(fmmstate *state, char *l, int lineno)
         }
         /* FALL THROUGH */
     default:
-        if (*l == 'x' && isspace(l[1])) {
+        if (*l == 'x' && isSPACE(l[1])) {
             m->reln = *l;
             ++l;
             goto GetDesc;   /* Bill The Cat */
@@ -1312,6 +1298,7 @@ fmm_parse_magic_file(fmmstate *state, char *file)
     if (! fhandle) {
         asprintf(&errstr, "Failed to open %s: %s", file, strerror(errno));
         fmm_error(state, errstr);
+        fclose(fhandle);
         return -1;
     }
 
@@ -1324,7 +1311,7 @@ fmm_parse_magic_file(fmmstate *state, char *file)
 
         /* skip leading whitespace */
         ws_offset = 0;
-        while (line[ws_offset] && isspace(line[ws_offset])) {
+        while (line[ws_offset] && isSPACE(line[ws_offset])) {
             ws_offset++;
         }
 
@@ -1419,29 +1406,8 @@ fmm_fsmagic(fmmstate *state, char *filename, char **mime_type)
         return 0;
     }
 
-#if 0
-    /* If it's a regular file, look at the file extension */
-    if (sb->st_mode & S_IFREG) {
-        for (ext = state->ext; ext ;  ext = ext->next) {
-            fn_len  = strlen(filename)
-            ext_len = strlen(ext->extension);
-
-            if (strlen > ext_len) {
-                p = filename + fn_len - ext_len;
-                if (STREQ(p, ext_len)) {
-                    *mime_type = (char *) malloc(sizeof(char) * strlen(ext->mime));
-                    memcpy(*mime_type, ext->mime, strlen(ext->mime));
-                    return 0;
-                }
-            }
-        }
-    }
-#endif
     return 1;
 }
-
-/* an optimization over plain strcmp() */
-#define    STREQ(a, b)    (*(a) == *(b) && strcmp((a), (b)) == 0)
 
 static int
 fmm_ascmagic(unsigned char *buf, size_t nbytes, char **mime_type)
@@ -1464,15 +1430,15 @@ fmm_ascmagic(unsigned char *buf, size_t nbytes, char **mime_type)
      */
     if (*buf == '.') {
         tp = buf + 1;
-        while (isspace(*tp))
+        while (isSPACE(*tp))
             ++tp;       /* skip leading whitespace */
-        if ((isalnum(*tp) || *tp == '\\') && (isalnum(*(tp + 1)) || *tp == '"')) {
+        if ((isALNUM(*tp) || *tp == '\\') && (isALNUM(*(tp + 1)) || *tp == '"')) {
             strcpy(*mime_type, "application/x-troff");
             return 0;
         }
     }
 
-    if ((*buf == 'c' || *buf == 'C') && isspace(*(buf + 1))) {
+    if ((*buf == 'c' || *buf == 'C') && isSPACE(*(buf + 1))) {
         /* Fortran */
         strcpy(*mime_type, "text/plain");
         return 0;
@@ -1489,7 +1455,7 @@ fmm_ascmagic(unsigned char *buf, size_t nbytes, char **mime_type)
     while ((token = strtok_r((char *) s, " \t\n\r\f", &strtok_state)) != NULL) {
         s = NULL;       /* make strtok() keep on tokin' */
         for (p = names; p < names + NNAMES; p++) {
-            if (STREQ(p->name, token)) {
+            if (strEQ(p->name, token)) {
                 strcpy(*mime_type, types[p->type]);
                 if (has_escapes)
                     strcat(*mime_type, " (with escape sequences)");
@@ -1616,11 +1582,11 @@ fmm_mime_magic(fmmstate *state, char *file, char **mime_type)
         return -1;
     }
 
-    data = (char *) malloc(sizeof(char) * (HOWMANY + 1));
+    Newz(1234, data, HOWMANY + 1, char);
     if (! fread(data, sizeof(char), HOWMANY, fhandle)) {
         asprintf(&errstr, "Failed to read from handle: %s", strerror(errno));
         fmm_error(state, errstr);
-        SAFE_FREE(data);
+        Safefree(data);
         return -1;
     }
 
@@ -1628,60 +1594,18 @@ fmm_mime_magic(fmmstate *state, char *file, char **mime_type)
         fclose(fhandle);
 
     if (fmm_softmagic(state, state->magic, &data, HOWMANY, mime_type) == 1) {
-        SAFE_FREE(data);
+        Safefree(data);
         return 0;
     }
 
     if (fmm_ascmagic(data, HOWMANY, mime_type) == 0) {
-        SAFE_FREE(data);
+        Safefree(data);
         return 0;
     }
 
-    SAFE_FREE(data);
+    Safefree(data);
     return 1;
 }
-
-#if 0
-SV *
-add_mime_ext(self, ext, mime)
-        SV *self;
-        SV *ext;
-        SV *mime;
-    PREINIT:
-        fmmstate *state;
-        char     *ext_str;
-        char     *mime_str;
-    CODE:
-        state = get_fmmstate_hv(self);
-        fmm_add_mime_ext(state, ext_str, mime);
-    OUTPUT:
-        RETVAL
-
-SV *
-parse_ext_file(self, file)
-        SV *self;
-        SV *file;
-    PREINIT:
-        fmmstate *state;
-        SV       *sv;
-        char     *filename;
-        STRLEN    len;
-    CODE:
-        state = get_fmmstate_hv(self);
-        SAFE_FREE(state->error);
-
-        RETVAL = &PL_sv_undef;
-        if (state) {
-            filename = SvPV(file, len);
-            if (fmm_parse_ext_file(state, filename)) {
-                RETVAL = &PL_sv_yes;
-            }
-        }
-    OUTPUT:
-        RETVAL
-
-
-#endif
 
 MODULE = File::MMagic::XS       PACKAGE = File::MMagic::XS
 
@@ -1725,8 +1649,8 @@ parse_magic_file(self, file)
         char     *filename;
         STRLEN    len;
     CODE:
-        state = get_fmmstate_hv(self);
-        SAFE_FREE(state->error);
+        state = get_fmmstate_hv(aTHX_ self);
+        Safefree(state->error);
 
         RETVAL = &PL_sv_undef;
         if (state) {
@@ -1749,18 +1673,17 @@ fsmagic(self, filename)
         fmmstate *state;
     CODE:
         fn = SvPV_nolen(filename);
-        state = get_fmmstate_hv(self);
-        SAFE_FREE(state->error);
+        state = get_fmmstate_hv(aTHX_ self);
+        Safefree(state->error);
 
-        type = (char *) malloc(sizeof(char) * BUFSIZ);
-        *type = '\0';
+        Newz(1234, type, BUFSIZ, char);
 
         if (fmm_fsmagic(state, fn, &type) == 0) {
             RETVAL = newSVpv(type, strlen(type));
         } else {
             RETVAL = &PL_sv_undef;
         }
-        SAFE_FREE(type);
+        Safefree(type);
     OUTPUT:
         RETVAL
 
@@ -1775,17 +1698,16 @@ ascmagic(self, data)
         fmmstate *state;
     CODE:
         buf = SvPV(data, len);
-        type = (char *) malloc(sizeof(char) * BUFSIZ);
-        *type = '\0';
+        Newz(1234, type, BUFSIZ, char);
 
-        state = get_fmmstate_hv(self);
-        SAFE_FREE(state->error);
+        state = get_fmmstate_hv(aTHX_ self);
+        Safefree(state->error);
         if (fmm_ascmagic(buf, (size_t) len, &type) == 0) {
             RETVAL = newSVpv(type, strlen(type));
         } else {
             RETVAL = &PL_sv_undef;
         }
-        SAFE_FREE(type);
+        Safefree(type);
     OUTPUT:
         RETVAL
 
@@ -1801,11 +1723,10 @@ ascmagic_file(self, filename)
         fmmstate *state;
     CODE:
         fn = SvPV_nolen(filename);
-        type = (char *) malloc(sizeof(char) * BUFSIZ);
-        *type = '\0';
+        Newz(1234, type, BUFSIZ, char);
 
-        state = get_fmmstate_hv(self);
-        SAFE_FREE(state->error);
+        state = get_fmmstate_hv(aTHX_ self);
+        Safefree(state->error);
         if (fmm_fsmagic(state, fn, &type) == 0) {
             RETVAL = newSVpv(type, strlen(type));
         } else {
@@ -1816,9 +1737,9 @@ ascmagic_file(self, filename)
                 RETVAL = &PL_sv_undef;
             }
 
-            SAFE_FREE(data);
+            Safefree(data);
         }
-        SAFE_FREE(type);
+        Safefree(type);
     OUTPUT:
         RETVAL
 
@@ -1833,18 +1754,17 @@ get_mime(self, filename)
         char *buf[HOWMANY + 1];
         fmmstate *state;
     CODE:
-        state = get_fmmstate_hv(self);
-        SAFE_FREE(state->error);
+        state = get_fmmstate_hv(aTHX_ self);
+        Safefree(state->error);
         fn = SvPV_nolen(filename);
-        type = (char *) malloc(sizeof(char) * MAXMIMESTRING);
-        *type = '\0';
+        Newz(1234, type, MAXMIMESTRING, char);
 
         if (fmm_mime_magic(state, fn, &type) == 0) {
             RETVAL = newSVpv(type, strlen(type));
         } else {
             RETVAL = &PL_sv_undef;
         }
-        SAFE_FREE(type);
+        Safefree(type);
     OUTPUT:
         RETVAL
 
@@ -1854,12 +1774,11 @@ error(self)
     PREINIT:
         fmmstate *state;
     CODE:
-        state = get_fmmstate_hv(self);
+        state = get_fmmstate_hv(aTHX_ self);
         RETVAL = &PL_sv_undef;
         if (state->error) {
             RETVAL = newSVpv(state->error, strlen(state->error));
         }
     OUTPUT:
         RETVAL
-
 

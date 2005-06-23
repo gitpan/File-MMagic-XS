@@ -1,0 +1,17 @@
+Changes
+=======
+
+All changes by Daisuke Maki <dmaki@cpan.org>, unless otherwise noted.
+
+0.03 - 23 June 2005
+   - Switch malloc/free calls with Newz/Safefree.
+   - Use more perl's macros is*()
+   - Use aTHX_ properly
+
+0.02 - 22 June 2005
+   - Add missing Changes file
+   - Fix return value from fmm_ascmagic.
+   - Add error()
+
+0.01 - 19 June 2005
+   - Initial CPAN release
