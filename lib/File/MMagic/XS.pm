@@ -6,7 +6,7 @@
 package File::MMagic::XS;
 use 5.006001;
 use strict;
-our $VERSION = '0.03';
+our $VERSION = '0.04';
 our $MAGIC_FILE = undef;
 
 require XSLoader;

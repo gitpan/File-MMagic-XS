@@ -3,6 +3,9 @@ Changes
 
 All changes by Daisuke Maki <dmaki@cpan.org>, unless otherwise noted.
 
+0.04 - 07 July 2005
+   - One more missing aTHX_ 
+
 0.03 - 23 June 2005
    - Switch malloc/free calls with Newz/Safefree.
    - Use more perl's macros is*()

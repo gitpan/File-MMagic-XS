@@ -480,7 +480,7 @@ static int
 magic_fmm_free_state(pTHX_ SV *self, MAGIC *mg)
 {
     fmmstate *state;
-    state = get_fmmstate_iv(self);
+    state = get_fmmstate_iv(aTHX_ self);
     if (state) {
         fmm_free_state(state);
     }
