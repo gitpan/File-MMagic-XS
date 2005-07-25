@@ -1,18 +1,18 @@
-# $Id: XS.pm 8 2005-06-23 09:10:08Z daisuke $
+# $Id: XS.pm 10 2005-07-25 14:33:58Z daisuke $
 #
 # Daisuke Maki <dmaki@cpan.org>
 # All rights reserved.
 
 package File::MMagic::XS;
-use 5.006001;
 use strict;
-our $VERSION = '0.04';
-our $MAGIC_FILE = undef;
+use vars ('$VERSION', '$MAGIC_FILE');
 
-require XSLoader;
-XSLoader::load('File::MMagic::XS', $VERSION);
+BEGIN
+{
+    $VERSION = '0.05';
+    require XSLoader;
+    XSLoader::load(__PACKAGE__, $VERSION);
 
-if (! defined $MAGIC_FILE) {
     require File::Spec;
     foreach my $path (map { File::Spec->catfile($_, qw(File MMagic magic)) } @INC) {
         if (-f $path) {
@@ -22,23 +22,18 @@ if (! defined $MAGIC_FILE) {
     }
 }
 
-sub new
+sub import
 {
     my $class = shift;
-    my $self  = bless {}, $class;
-    $self->_alloc_fmmstate;
 
-    my %args = @_;
-
-    if (! $args{file}) {
-        if (!$MAGIC_FILE) {
-            die "No magic file found :(";
+    for(my $idx = 0; $idx < @_; $idx++) {
+        if ($_[$idx] eq ':compat') {
+            require File::MMagic::compat;
+            splice(@_, $idx, 1) and last;
         }
-        $args{file} ||= $MAGIC_FILE;
     }
 
-    $self->parse_magic_file($args{file});
-    return $self;
+    $class->SUPER::import(@_);
 }
 
 1;
@@ -54,13 +49,33 @@ File::MMagic::XS - Guess File Type With XS (a la mod_mime_magic)
   use File::MMagic::XS;
 
   my $m = File::MMagic::XS->new();
+     $m = File::MMagic::XS->new('/etc/magic'); # use external magic file
+
   my $mime = $m->get_mime($file);
+
+  # use File::MMagic compatible interface
+  use File::MMagic::XS qw(:compat);
+
+  my $m = File::MMagic::XS->new();
+  $m->checktype_filename($file);
 
 =head1 DESCRIPTION
 
 This is a port of Apache2 mod_mime_magic.c in Perl, written in XS with the
 aim of being efficient and fast especially for applications that need to be 
 run for an extended amount of time.
+
+There is a compatibility layer for File::MMagic. you can specify :compat
+when importing the module
+
+   use File::MMagic::XS qw(:compat);
+
+And then the following methods are going to be available from File::MMagic::XS:
+
+   checktype_filename
+   checktype_filehandle
+   checktype_contents
+   addMagicEntry
 
 Currently this software is in beta. If you have suggestions/recommendations 
 about the interface or anything else, now is your chance to send them!
@@ -89,10 +104,20 @@ If no matching MIME type is found, then undef is returned.
 Inspects a file and returns a MIME type using inode information only. The
 contents of the file is not inspected.
 
+=head2 fhmagic($fh)
+
+Inspects a file handle and returns a mime string by reading the contents
+of the file handle.
+
 =head2 ascmagic($file)
 
 Inspects a piece of data (assuming it's not binary data), and attempts to
 determine the file type.
+
+=head2 add_magic($magic_line)
+
+Adds a new magic entry to the object. The format of $magic_line is the same
+as magic(5) file. This allows you to add custom magic entries at run time
 
 =head2 error()
 
@@ -105,12 +130,6 @@ Returns the last error string.
   xs   24390/s 27283%     --
 
 Hey, I told you it's fast...
-
-=head1 TODO
-
-Add File::MMagic interface compatibility?
-
-Use PerlIO_* abstraction?
 
 =head1 SEE ALSO
 
