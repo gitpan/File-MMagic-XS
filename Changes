@@ -3,6 +3,9 @@ Changes
 
 All changes by Daisuke Maki <dmaki@cpan.org>, unless otherwise noted.
 
+0.06 - 26 July 2005
+   - Remove debug lines.
+
 0.05 - 25 July 2005
    - Cleanup XS. Now File::MMagic::XS instance is not a hashref,
      but a blessed scalar

@@ -9,7 +9,7 @@ use vars ('$VERSION', '$MAGIC_FILE');
 
 BEGIN
 {
-    $VERSION = '0.05';
+    $VERSION = '0.06';
     require XSLoader;
     XSLoader::load(__PACKAGE__, $VERSION);
 

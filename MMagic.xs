@@ -1486,7 +1486,6 @@ fmm_softmagic(fmmstate *state, char **buf, int size, char **mime_type)
     fmmagic *m = state->magic;
 
     for (; m; m = m->next) {
-printf("desc = %s", m->desc);
         /* check if main entry matches */
         if (! fmm_mget(state, &p, *buf, m, size, mime_type) || !fmm_mcheck(state, &p, m)) {
             /* main entry didn't match, flush its continuations */
@@ -1842,12 +1841,10 @@ add_magic(self, magic)
             croak("Object not initialized.");
 
         line = SvPV_nolen(magic);
-printf("last = %p", state->last);
         if (fmm_parse_magic_line(state, line, 0) == 0) 
             RETVAL = &PL_sv_yes;
         else
             RETVAL = &PL_sv_undef;
-printf("last = %p", state->last);
 
     OUTPUT:
         RETVAL
