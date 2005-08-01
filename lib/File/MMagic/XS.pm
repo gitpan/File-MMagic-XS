@@ -1,4 +1,4 @@
-# $Id: XS.pm 10 2005-07-25 14:33:58Z daisuke $
+# $Id: XS.pm 13 2005-08-01 01:54:28Z daisuke $
 #
 # Daisuke Maki <dmaki@cpan.org>
 # All rights reserved.
@@ -9,7 +9,7 @@ use vars ('$VERSION', '$MAGIC_FILE');
 
 BEGIN
 {
-    $VERSION = '0.06';
+    $VERSION = '0.07';
     require XSLoader;
     XSLoader::load(__PACKAGE__, $VERSION);
 

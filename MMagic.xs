@@ -112,7 +112,7 @@
 #include <sys/stat.h>
 #include <string.h>
 
-#define FMMAGIC_DEBUG 1
+#define FMMAGIC_DEBUG 0
 #define EATAB(x) \
     {while (isSPACE(*x)) ++x;}
 #define MAXDESC   50       /* max leng of text description */
@@ -481,7 +481,7 @@ fmm_append_buf(fmmstate *state, char **dst, char *str, ...)
         return;
     }
 #ifdef FMM_DEBUG
-    fprintf(stderr, "dst = %s, buf = %s\n", *dst, buf);
+    PerlIO_printf(PerlIO_stderr(), "dst = %s, buf = %s\n", *dst, buf);
 #endif
     strncat(*dst, buf, strlen(buf));
 }
@@ -763,7 +763,7 @@ fmm_append_mime(fmmstate *state, char **buf, union VALUETYPE *p, fmmagic *m)
     SV *err;
 
 #ifdef FMM_DEBUG
-    fprintf(stderr, "fmm_append_mime: buf = %s\n", buf);
+    PerlIO_printf(PerlIO_stderr(), "fmm_append_mime: buf = %s\n", buf);
 #endif 
     switch (m->type) {
         case BYTE:
@@ -815,7 +815,7 @@ fmm_mcheck(fmmstate *state, union VALUETYPE *p, fmmagic *m)
 
     if ((m->value.s[0] == 'x') && (m->value.s[1] == '\0')) {
         /* XXX - WTF does this mean?? */
-        fprintf(stderr, "fmm_mcheck: BOINK\n");
+        PerlIO_printf(PerlIO_stderr(), "fmm_mcheck: BOINK\n");
         return 1;
     }
 
@@ -1113,7 +1113,7 @@ fmm_parse_magic_line(fmmstate *state, char *l, int lineno)
                     m->in.type = BYTE;
                     break;
                 default:
-                    fprintf(stderr, "fmm_parse_magic_line: indirect offset type %c invalid", *l);
+                    PerlIO_printf(PerlIO_stderr(), "fmm_parse_magic_line: indirect offset type %c invalid", *l);
             }
             l++;
         }
@@ -1130,7 +1130,7 @@ fmm_parse_magic_line(fmmstate *state, char *l, int lineno)
             t = l;
         }
         if (*t++ != ')') {
-            fprintf(stderr, "fmm_parse_magic_line: missing ')' in indirect offset");
+            PerlIO_printf(PerlIO_stderr(), "fmm_parse_magic_line: missing ')' in indirect offset");
         }
         l = t;
     } 
@@ -1203,7 +1203,7 @@ fmm_parse_magic_line(fmmstate *state, char *l, int lineno)
         l += NLEDATE;
     }
     else {
-        fprintf(stderr, "fmm_parse_magic_line: type %s invalid", l);
+        PerlIO_printf(PerlIO_stderr(), "fmm_parse_magic_line: type %s invalid", l);
     }
     /* New-style anding: "0 byte&0x80 =0x80 dynamically linked" */
     if (*l == '&') {
@@ -1476,7 +1476,7 @@ fmm_ascmagic(unsigned char *buf, size_t nbytes, char **mime_type)
 }
 
 static int
-fmm_softmagic(fmmstate *state, char **buf, int size, char **mime_type)
+fmm_softmagic(fmmstate *state, unsigned char **buf, int size, char **mime_type)
 {
     int cont_level = 0;
     int need_separator = 0;
@@ -1551,17 +1551,17 @@ fmm_softmagic(fmmstate *state, char **buf, int size, char **mime_type)
             /* move to next continuation record */
             m = m->next;
         }
-        return 1;
+        return 0;
     }
-    return 0;
+    return 1;
 }
 
 /* Perform mime magic on a PerlIO handle */
 /* Perform mime magic on a buffer */
 static int
-fmm_bufmagic(fmmstate *state, char **buffer, char **mime_type)
+fmm_bufmagic(fmmstate *state, unsigned char **buffer, char **mime_type)
 {
-    if (fmm_softmagic(state, buffer, HOWMANY, mime_type) == 1) {
+    if (fmm_softmagic(state, buffer, HOWMANY, mime_type) == 0) {
         return 0;
     }
 
@@ -1575,10 +1575,10 @@ static int
 fmm_fhmagic(fmmstate *state, PerlIO *fhandle, char **mime_type)
 {
     SV *err;
-    char *data;
+    unsigned char *data;
     int ret;
 
-    Newz(1234, data, HOWMANY + 1, char);
+    Newz(1234, data, HOWMANY + 1, unsigned char);
     if (! PerlIO_read(fhandle, data, HOWMANY)) {
         err = newSVpvf(
             "Failed to read from handle: %s",
@@ -1620,7 +1620,7 @@ fmm_mime_magic(fmmstate *state, char *file, char **mime_type)
         return -1;
     }
 
-    fmm_fhmagic(state, fhandle, mime_type);
+    return fmm_fhmagic(state, fhandle, mime_type);
 }
 
 MODULE = File::MMagic::XS       PACKAGE = File::MMagic::XS
@@ -1716,7 +1716,7 @@ fhmagic(self, svio)
         if (! SvROK(svio))
             croak("Usage: self->fhmagic(*handle))");
 
-        io = IoOFP(sv_2io(svio));
+        io = IoIFP(sv_2io(SvRV(svio)));
         if (! io)
             croak("Not a handle");
 
@@ -1761,7 +1761,7 @@ bufmagic(self, buf)
         SV *self;
         SV *buf;
     PREINIT:
-        char *buffer;
+        unsigned char *buffer;
         char *type;
         STRLEN len;
         fmmstate *state;
@@ -1771,7 +1771,7 @@ bufmagic(self, buf)
         if (! FMM_OK(state))
             croak("Object not initialized.");
 
-        buffer = SvPV_nolen(buf);
+        buffer = (unsigned char *) SvPV_nolen(buf);
 
         Safefree(state->error);
 
@@ -1794,7 +1794,7 @@ ascmagic(self, data)
         fmmstate *state;
         int rc;
     CODE:
-        buf = SvPV(data, len);
+        buf = (unsigned char *) SvPV(data, len);
         Newz(1234, type, BUFSIZ, char);
 
         state = XS_STATE(fmmstate *, self);
