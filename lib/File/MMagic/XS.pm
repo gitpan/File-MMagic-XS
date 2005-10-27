@@ -9,7 +9,7 @@ use vars ('$VERSION', '$MAGIC_FILE');
 
 BEGIN
 {
-    $VERSION = '0.07';
+    $VERSION = '0.08';
     require XSLoader;
     XSLoader::load(__PACKAGE__, $VERSION);
 
@@ -118,6 +118,17 @@ determine the file type.
 
 Adds a new magic entry to the object. The format of $magic_line is the same
 as magic(5) file. This allows you to add custom magic entries at run time
+
+=head2 add_file_ext($ext, $mime)
+
+Adds a new file extension to MIME mapping. This is used as a fallback method
+to determining MIME types. 
+
+  my $magic = File::MMagic::XS->new;
+  $magic->add_file_ext('t', 'text/perl-test');
+  my $mime  = $magic->get_mime('t/01-sanity.t');
+
+This will make get_mime() return 'text/perl-test'.
 
 =head2 error()
 

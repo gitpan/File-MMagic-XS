@@ -11,6 +11,7 @@ my %INFO = (
     AUTHOR       => 'Daisuke Maki <dmaki@cpan.org>',
     NAME         => 'File::MMagic::XS',
     VERSION_FROM => 'lib/File/MMagic/XS.pm',
+    H            => [ qw(MMagicST.c MMagicST.h) ],
     OBJECT       => '$(O_FILES)',
 );
 

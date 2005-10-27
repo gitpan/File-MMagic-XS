@@ -3,6 +3,12 @@ Changes
 
 All changes by Daisuke Maki <dmaki@cpan.org>, unless otherwise noted.
 
+0.08 - 27 Oct 2005
+   - Implement add_file_ext(), which acts as a fallback to guessing MIME
+     types based on the file extension, when all else fails
+   - Fix fmm_ascmagic so that when it fallsback to text/plain, it correctly
+     reports that it guessed, not a real match.
+
 0.07 - 01 Aug 2005
    - Yikes, Perl-C mixup: forgot to call "return".
      Reported by Tatsuhiko Miyagawa.

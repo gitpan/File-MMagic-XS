@@ -10,5 +10,7 @@ t/02-runthrough.t
 t/data/test.rtf
 t/data/test.xml
 MMagic.xs
+MMagicST.c
+MMagicST.h
 META.yml                                 Module meta-data (added by MakeMaker)
 Changes

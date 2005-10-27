@@ -111,8 +111,8 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <string.h>
+#include "MMagicST.h"
 
-#define FMMAGIC_DEBUG 0
 #define EATAB(x) \
     {while (isSPACE(*x)) ++x;}
 #define MAXDESC   50       /* max leng of text description */
@@ -169,6 +169,7 @@ typedef struct _fmmstate {
     fmmagic *magic;
     fmmagic *last;
     SV    *error;
+    st_table *ext;
 } fmmstate;
 
 /*
@@ -446,6 +447,7 @@ void fmm_free_state(fmmstate *state)
         m  = m->next;
         Safefree(md);
     }
+    Safefree(state->ext);
     Safefree(state);
 }
 
@@ -1472,7 +1474,7 @@ fmm_ascmagic(unsigned char *buf, size_t nbytes, char **mime_type)
 
     /* all else fails, but it is ascii... */
     strcpy(*mime_type, "text/plain");
-    return 0;
+    return 1;
 }
 
 static int
@@ -1562,10 +1564,16 @@ static int
 fmm_bufmagic(fmmstate *state, unsigned char **buffer, char **mime_type)
 {
     if (fmm_softmagic(state, buffer, HOWMANY, mime_type) == 0) {
+#ifdef FMM_DEBUG
+    fprintf(stderr, "[fmm_bufmagic]: fmm_softmagic returns 0\n");
+#endif
         return 0;
     }
 
     if (fmm_ascmagic(*buffer, HOWMANY, mime_type) == 0) {
+#ifdef FMM_DEBUG
+    fprintf(stderr, "[fmm_bufmagic]: fmm_ascmagic returns 0\n");
+#endif
         return 0;
     }
     return 1;
@@ -1599,6 +1607,23 @@ fmm_fhmagic(fmmstate *state, PerlIO *fhandle, char **mime_type)
 }
 
 static int
+fmm_ext_magic(fmmstate *state, char *file, char **mime_type)
+{
+    char ext[BUFSIZ];
+    /* Look for the last dot */
+    char *dot = rindex(file, '.');
+    if (dot == 0x00) {
+        return 0;
+    }
+
+    strncpy(ext, dot + 1, BUFSIZ);
+    if (st_lookup(state->ext, (st_data_t) ext, (st_data_t *) mime_type) == 0) {
+        return 1;
+    }
+    return 0;
+}
+
+static int
 fmm_mime_magic(fmmstate *state, char *file, char **mime_type)
 {
     PerlIO *fhandle;
@@ -1620,7 +1645,14 @@ fmm_mime_magic(fmmstate *state, char *file, char **mime_type)
         return -1;
     }
 
-    return fmm_fhmagic(state, fhandle, mime_type);
+    if ((ret = fmm_fhmagic(state, fhandle, mime_type)) == 0) {
+#ifdef FMM_DEBUG
+    fprintf(stderr, "[fmm_mime_magic]: fmm_fhmagic returns 0\n");
+#endif
+        return 0;
+    }
+
+    return fmm_ext_magic(state, file, mime_type);
 }
 
 MODULE = File::MMagic::XS       PACKAGE = File::MMagic::XS
@@ -1645,6 +1677,7 @@ new(class, ...)
         Newz(1234, state, 1, fmmstate);
         state->magic = NULL;
         state->error = NULL;
+        state->ext   = st_init_strtable();
 
         sv = newSViv(PTR2IV(state));
         sv_magic(sv, 0, '~', 0, 0);
@@ -1846,6 +1879,28 @@ add_magic(self, magic)
         else
             RETVAL = &PL_sv_undef;
 
+    OUTPUT:
+        RETVAL
+
+SV *
+add_file_ext(self, ext, mime)
+        SV *self;
+        char *ext;
+        char *mime;
+    PREINIT:
+        fmmstate *state;
+        char     *dummy;
+    CODE:
+        state = XS_STATE(fmmstate *, self);
+        if (! FMM_OK(state))
+            croak("Object not initialized");
+
+        if (st_lookup(state->ext, (st_data_t) ext, (st_data_t *) &dummy)) {
+            RETVAL = &PL_sv_no;
+        } else {
+            st_insert(state->ext, (st_data_t) ext, (st_data_t) mime);
+            RETVAL = &PL_sv_yes;
+        }
     OUTPUT:
         RETVAL
 
