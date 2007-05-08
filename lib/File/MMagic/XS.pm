@@ -1,6 +1,6 @@
-# $Id: XS.pm 13 2005-08-01 01:54:28Z daisuke $
+# $Id: /mirror/perl/File-MMagic-XS/trunk/lib/File/MMagic/XS.pm 7114 2007-05-08T22:50:35.040421Z daisuke  $
 #
-# Daisuke Maki <dmaki@cpan.org>
+# Copyright (c) 2005-2007 Daisuke Maki <daisuke@endeworks.jp>
 # All rights reserved.
 
 package File::MMagic::XS;
@@ -9,9 +9,15 @@ use vars ('$VERSION', '$MAGIC_FILE');
 
 BEGIN
 {
-    $VERSION = '0.08';
-    require XSLoader;
-    XSLoader::load(__PACKAGE__, $VERSION);
+    $VERSION = '0.09';
+    if ($] > 5.006) {
+        require XSLoader;
+        XSLoader::load(__PACKAGE__, $VERSION);
+    } else {
+        require DynaLoader;
+        @File::MMagic::XS::ISA = ('DynaLoader');
+        __PACKCAGE__->bootstrap();
+    }
 
     require File::Spec;
     foreach my $path (map { File::Spec->catfile($_, qw(File MMagic magic)) } @INC) {
@@ -28,7 +34,11 @@ sub import
 
     for(my $idx = 0; $idx < @_; $idx++) {
         if ($_[$idx] eq ':compat') {
-            require File::MMagic::compat;
+            *checktype_filename   = \&get_mime;
+            *checktype_filehandle = \&fhmagic;
+            *checktype_contents   = \&bufmagic;
+            *addMagicEntry        = \&add_magic;
+
             splice(@_, $idx, 1) and last;
         }
     }
@@ -114,6 +124,10 @@ of the file handle.
 Inspects a piece of data (assuming it's not binary data), and attempts to
 determine the file type.
 
+=head2 bufmagic($scalar)
+
+Inspects a scalar buffer, and attempts to determine the file type
+
 =head2 add_magic($magic_line)
 
 Adds a new magic entry to the object. The format of $magic_line is the same
@@ -148,8 +162,15 @@ L<File::MMagic|File::MMagic>
 
 =head1 AUTHOR
 
-Copyright 2005 Daisuke Maki E<lt>dmaki@cpan.orgE<gt>. Development funded by Brazil Ltd E<lt>http://b.razil.jpE<gt>. 
+Copyright 2005-2007 Daisuke Maki E<lt>daisuke@endeworks.jpE<gt>.
 
 Underlying software: Copyright 1999-2004 The Apache Software Foundation, Copyright (c) 1996-1997 Cisco Systems, Inc., Copyright (c) Ian F. Darwin, 1987. Written by Ian F. Darwin.
+
+=head1 LICENSE
+
+This program is free software; you can redistribute it and/or modify it
+under the same terms as Perl itself.
+
+See http://www.perl.com/perl/misc/Artistic.html
 
 =cut

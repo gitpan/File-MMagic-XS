@@ -1,16 +1,20 @@
 benchmark.pl
+Changes
 lib/File/MMagic/magic
 lib/File/MMagic/XS.pm
-lib/File/MMagic/compat.pm
 Makefile.PL
 MANIFEST			This list of files
-ppport.h
-t/01-sanity.t
-t/02-runthrough.t
-t/data/test.rtf
-t/data/test.xml
+META.yml
 MMagic.xs
 MMagicST.c
 MMagicST.h
-META.yml                                 Module meta-data (added by MakeMaker)
-Changes
+ppport.h
+t/01-sanity.t
+t/02-runthrough.t
+t/03-error.t
+t/99_pod-coverage.t
+t/99_pod.t
+t/compat_01-selfcheck.t
+t/compat_02-extmagic.t
+t/data/test.rtf
+t/data/test.xml

@@ -380,4 +380,3 @@
 4   string      moov        video/quicktime 
 4   string      mdat        video/quicktime
 
-0   string  ID3 audio/mpeg

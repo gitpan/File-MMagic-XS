@@ -1,7 +1,12 @@
 Changes
 =======
 
-All changes by Daisuke Maki <dmaki@cpan.org>, unless otherwise noted.
+All changes by Daisuke Maki, unless otherwise noted.
+
+0.09 - 09 May 2007
+   - Kwalitee updates: doc fixes, POD tests, license.
+   - Fallback to DynaLoader for older perls
+   - Remove compat.pm
 
 0.08 - 27 Oct 2005
    - Implement add_file_ext(), which acts as a fallback to guessing MIME
