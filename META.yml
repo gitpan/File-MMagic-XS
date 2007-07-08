@@ -1,8 +1,8 @@
 --- #YAML:1.0
 name:                File-MMagic-XS
-version:             0.09
+version:             0.09002
 abstract:            Guess File Type With XS (a la mod_mime_magic)
-license:             ~
+license:             perl
 generated_by:        ExtUtils::MakeMaker version 6.32
 distribution_type:   module
 requires:     

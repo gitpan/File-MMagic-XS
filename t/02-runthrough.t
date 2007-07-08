@@ -10,7 +10,7 @@ BEGIN
         't/data/test.xml' => 'text/xml',
         't/data/test.rtf' => 'application/rtf'
     );
-    plan(tests => scalar( keys %map ) * 3 + 1);
+    plan(tests => scalar( keys %map ) * 4 + 1);
 }
 
 BEGIN
@@ -27,4 +27,9 @@ while (my($file, $mime) = each %map) {
 
     ok(open(F, $file), "ok to open $file");
     is($fm->fhmagic(\*F), $mime, "$file: expected $mime from fhmagic");
+
+    seek(F, 0, 0);
+    my $buf = do { local $/ = undef; <F> };
+    my $ref = \$buf;
+    is($fm->bufmagic($ref), $mime, "$file: expected $mime from bufmagic");
 }

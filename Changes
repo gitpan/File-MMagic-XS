@@ -3,6 +3,13 @@ Changes
 
 All changes by Daisuke Maki, unless otherwise noted.
 
+0.09002 - 09 Jul 2007
+   - Allow bufmagic() to accept a ref to a scalar for performance (rt #28040)
+   - Don't close file handle for fhmagic
+
+0.09001 - 06 Jun 2007
+   - Fix typo (rt #27454)
+
 0.09 - 09 May 2007
    - Kwalitee updates: doc fixes, POD tests, license.
    - Fallback to DynaLoader for older perls

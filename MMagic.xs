@@ -1598,9 +1598,6 @@ fmm_fhmagic(fmmstate *state, PerlIO *fhandle, char **mime_type)
         return -1;
     }
 
-    if (fhandle)
-        PerlIO_close(fhandle);
-
     ret = fmm_bufmagic(state, &data, mime_type);
     Safefree(data);
     return ret;
@@ -1649,8 +1646,10 @@ fmm_mime_magic(fmmstate *state, char *file, char **mime_type)
 #ifdef FMM_DEBUG
     fprintf(stderr, "[fmm_mime_magic]: fmm_fhmagic returns 0\n");
 #endif
+        PerlIO_close(fhandle);
         return 0;
     }
+    PerlIO_close(fhandle);
 
     return fmm_ext_magic(state, file, mime_type);
 }
@@ -1804,7 +1803,12 @@ bufmagic(self, buf)
         if (! FMM_OK(state))
             croak("Object not initialized.");
 
-        buffer = (unsigned char *) SvPV_nolen(buf);
+        /* rt #28040, allow RV to SVs to be passed here */
+        if (SvROK(buf) && SvTYPE(SvRV(buf)) == SVt_PV) {
+            buffer = (unsigned char *) SvPV_nolen( SvRV( buf ) );
+        } else {
+            buffer = (unsigned char *) SvPV_nolen(buf);
+        }
 
         Safefree(state->error);
 

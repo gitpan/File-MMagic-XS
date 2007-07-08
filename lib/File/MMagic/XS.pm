@@ -1,4 +1,4 @@
-# $Id: /mirror/perl/File-MMagic-XS/trunk/lib/File/MMagic/XS.pm 7114 2007-05-08T22:50:35.040421Z daisuke  $
+# $Id: /local/perl/File-MMagic-XS/trunk/lib/File/MMagic/XS.pm 13057 2007-07-08T23:04:24.252423Z daisuke  $
 #
 # Copyright (c) 2005-2007 Daisuke Maki <daisuke@endeworks.jp>
 # All rights reserved.
@@ -9,14 +9,14 @@ use vars ('$VERSION', '$MAGIC_FILE');
 
 BEGIN
 {
-    $VERSION = '0.09';
+    $VERSION = '0.09002';
     if ($] > 5.006) {
         require XSLoader;
         XSLoader::load(__PACKAGE__, $VERSION);
     } else {
         require DynaLoader;
         @File::MMagic::XS::ISA = ('DynaLoader');
-        __PACKCAGE__->bootstrap();
+        __PACKAGE__->bootstrap();
     }
 
     require File::Spec;
