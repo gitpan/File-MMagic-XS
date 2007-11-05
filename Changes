@@ -3,6 +3,11 @@ Changes
 
 All changes by Daisuke Maki, unless otherwise noted.
 
+0.09003 - 05 Nov 2007
+   - Fix BBC breakage in anticipation for 5.10 (Thanks a bunch to Jan Dubois
+     and Andres Koenig). This was caused by a erronous Safefree() call where
+     it should have been a simple free().
+
 0.09002 - 09 Jul 2007
    - Allow bufmagic() to accept a ref to a scalar for performance (rt #28040)
    - Don't close file handle for fhmagic

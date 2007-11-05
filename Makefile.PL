@@ -1,8 +1,9 @@
-# $Id: /local/perl/File-MMagic-XS/trunk/Makefile.PL 13058 2007-07-08T23:05:49.631249Z daisuke  $
+# $Id: /mirror/perl/File-MMagic-XS/trunk/Makefile.PL 8589 2007-11-05T05:59:57.171964Z daisuke  $
 #
 # Daisuke Maki <daisuke@endeworks.jp>
 # All rights reserved.
 
+use strict;
 use 5.006001;
 use ExtUtils::MakeMaker;
 

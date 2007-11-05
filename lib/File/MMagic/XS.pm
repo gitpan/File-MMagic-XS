@@ -1,4 +1,4 @@
-# $Id: /local/perl/File-MMagic-XS/trunk/lib/File/MMagic/XS.pm 13057 2007-07-08T23:04:24.252423Z daisuke  $
+# $Id: /mirror/perl/File-MMagic-XS/trunk/lib/File/MMagic/XS.pm 8591 2007-11-05T06:08:11.946493Z daisuke  $
 #
 # Copyright (c) 2005-2007 Daisuke Maki <daisuke@endeworks.jp>
 # All rights reserved.
@@ -9,7 +9,7 @@ use vars ('$VERSION', '$MAGIC_FILE');
 
 BEGIN
 {
-    $VERSION = '0.09002';
+    $VERSION = '0.09003';
     if ($] > 5.006) {
         require XSLoader;
         XSLoader::load(__PACKAGE__, $VERSION);
@@ -72,7 +72,7 @@ File::MMagic::XS - Guess File Type With XS (a la mod_mime_magic)
 =head1 DESCRIPTION
 
 This is a port of Apache2 mod_mime_magic.c in Perl, written in XS with the
-aim of being efficient and fast especially for applications that need to be 
+aim of being efficient and fast, especially for applications that need to be 
 run for an extended amount of time.
 
 There is a compatibility layer for File::MMagic. you can specify :compat
@@ -150,11 +150,12 @@ Returns the last error string.
 
 =head1 PERFORMANCE
 
-          Rate   perl     xs
-  perl  89.1/s     --  -100%
-  xs   24390/s 27283%     --
+This is on my laptop (MacBook, Core 2 Duo/ Mac OS X 10.4.3), tested against
+File::MMagic::XS 0.09003
 
-Hey, I told you it's fast...
+          Rate  perl    xs
+  perl   513/s    --  -96%
+  xs   12048/s 2249%    --
 
 =head1 SEE ALSO
 

@@ -422,9 +422,9 @@ static struct names {
     (x != NULL)
 
 #define FMM_SET_ERROR(s, e) \
-    if (s->error != NULL) \
+    if (s->error != NULL) { \
         Safefree(s->error); \
-\
+    } \
     s->error = e;
 
 #define FMM_RESULT(type, rc) \
@@ -447,7 +447,7 @@ void fmm_free_state(fmmstate *state)
         m  = m->next;
         Safefree(md);
     }
-    Safefree(state->ext);
+    free(state->ext);
     Safefree(state);
 }
 
@@ -1565,14 +1565,14 @@ fmm_bufmagic(fmmstate *state, unsigned char **buffer, char **mime_type)
 {
     if (fmm_softmagic(state, buffer, HOWMANY, mime_type) == 0) {
 #ifdef FMM_DEBUG
-    fprintf(stderr, "[fmm_bufmagic]: fmm_softmagic returns 0\n");
+    PerlIO_printf(PerlIO_stderr(), "[fmm_bufmagic]: fmm_softmagic returns 0\n");
 #endif
         return 0;
     }
 
     if (fmm_ascmagic(*buffer, HOWMANY, mime_type) == 0) {
 #ifdef FMM_DEBUG
-    fprintf(stderr, "[fmm_bufmagic]: fmm_ascmagic returns 0\n");
+    PerlIO_printf(PerlIO_stder(), "[fmm_bufmagic]: fmm_ascmagic returns 0\n");
 #endif
         return 0;
     }
@@ -1644,7 +1644,7 @@ fmm_mime_magic(fmmstate *state, char *file, char **mime_type)
 
     if ((ret = fmm_fhmagic(state, fhandle, mime_type)) == 0) {
 #ifdef FMM_DEBUG
-    fprintf(stderr, "[fmm_mime_magic]: fmm_fhmagic returns 0\n");
+    PerlIO_printf(PerlIO_stderr(), "[fmm_mime_magic]: fmm_fhmagic returns 0\n");
 #endif
         PerlIO_close(fhandle);
         return 0;
@@ -1720,7 +1720,7 @@ parse_magic_file(self, file)
         STRLEN    len;
     CODE:
         state = XS_STATE(fmmstate *, self);
-        Safefree(state->error);
+        FMM_SET_ERROR(state, NULL);
 
         if (! FMM_OK(state))
             croak("Object not initialized.");
@@ -1752,7 +1752,7 @@ fhmagic(self, svio)
         if (! io)
             croak("Not a handle");
 
-        Safefree(state->error);
+        FMM_SET_ERROR(state, NULL);
 
         Newz(1234, type, BUFSIZ, char);
 
@@ -1777,8 +1777,7 @@ fsmagic(self, filename)
             croak("Object not initialized.");
 
         fn = SvPV_nolen(filename);
-
-        Safefree(state->error);
+        FMM_SET_ERROR(state, NULL);
 
         Newz(1234, type, BUFSIZ, char);
 
@@ -1810,7 +1809,7 @@ bufmagic(self, buf)
             buffer = (unsigned char *) SvPV_nolen(buf);
         }
 
-        Safefree(state->error);
+        FMM_SET_ERROR(state, NULL);
 
         Newz(1234, type, BUFSIZ, char);
 
@@ -1835,7 +1834,7 @@ ascmagic(self, data)
         Newz(1234, type, BUFSIZ, char);
 
         state = XS_STATE(fmmstate *, self);
-        Safefree(state->error);
+        FMM_SET_ERROR(state, NULL);
 
         rc = fmm_ascmagic(buf, len, &type);
         RETVAL = FMM_RESULT(type, rc);
@@ -1855,10 +1854,10 @@ get_mime(self, filename)
         int rc;
     CODE:
         state = XS_STATE(fmmstate *, self);
-        Safefree(state->error);
         fn = SvPV_nolen(filename);
         Newz(1234, type, MAXMIMESTRING, char);
 
+        FMM_SET_ERROR(state, NULL);
         rc = fmm_mime_magic(state, fn, &type);
         RETVAL = FMM_RESULT(type, rc);
         Safefree(type);
