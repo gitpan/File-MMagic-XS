@@ -3,6 +3,12 @@ Changes
 
 All changes by Daisuke Maki, unless otherwise noted.
 
+0.09003_01 - 07 Apr 2010
+   - Fix memory corruption (Martin Blapp)
+   - Fix rt #28072. Changing $/ doesn't change the return value (Martin Blapp)
+   - Fix how SV returned by error() is handled.
+   - Add a clone() method.
+
 0.09003 - 05 Nov 2007
    - Fix BBC breakage in anticipation for 5.10 (Thanks a bunch to Jan Dubois
      and Andres Koenig). This was caused by a erronous Safefree() call where

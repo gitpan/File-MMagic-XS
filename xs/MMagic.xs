@@ -1,5 +1,4 @@
-/* $Id$
- *
+/*
  * Daisuke Maki <dmaki@cpan.org>
  * All rights reserved.
  *
@@ -422,8 +421,8 @@ static struct names {
     (x != NULL)
 
 #define FMM_SET_ERROR(s, e) \
-    if (s->error != NULL) { \
-        Safefree(s->error); \
+    if (e && s->error) { \
+	Safefree(s->error); \
     } \
     s->error = e;
 
@@ -447,11 +446,12 @@ void fmm_free_state(fmmstate *state)
         m  = m->next;
         Safefree(md);
     }
-    free(state->ext);
+    if (state->ext)
+	st_free_table(state->ext);
     Safefree(state);
 }
 
-static int
+static void
 magic_fmm_free_state(pTHX_ SV *self, MAGIC *mg)
 {
     fmmstate *state;
@@ -459,6 +459,10 @@ magic_fmm_free_state(pTHX_ SV *self, MAGIC *mg)
     if (state) {
         fmm_free_state(state);
     }
+    /*
+     * Remove the perl magic from SV, should decrement the refcount
+     */
+    sv_unmagic(self, 0);
 }
 
 MGVTBL
@@ -540,7 +544,7 @@ fmm_mconvert(fmmstate *state, union VALUETYPE *p, fmmagic *m)
 }
 
 static int
-fmm_mget(fmmstate *state, union VALUETYPE *p, unsigned char *s, fmmagic *m, size_t nbytes, char **mime_type)
+fmm_mget(fmmstate *state, union VALUETYPE *p, unsigned char *s, fmmagic *m, size_t nbytes)
 {
     long offset = m->offset;
 
@@ -578,58 +582,6 @@ fmm_mget(fmmstate *state, union VALUETYPE *p, unsigned char *s, fmmagic *m, size
     }
 
     return 1;
-}
-
-static int
-fmm_slurp_fh(PerlIO *fhandle, char **data, int *size)
-{
-    int datasize;
-    int rbytes;
-    int sofar = 0;
-    long pos;
-    char buf[BUFSIZ];
-
-    pos = PerlIO_tell(fhandle);
-
-    datasize = BUFSIZ * 10;
-    Newz(1234, *data, datasize, char);
-
-    while ((rbytes = PerlIO_read(fhandle, buf, BUFSIZ)) != 0) {
-        sofar += rbytes;
-        if (datasize < sofar){
-            Renew(*data, datasize * 2, char);
-            datasize *= 2;
-        }
-        strncpy((*data + sofar - rbytes), buf, BUFSIZ);
-    }
-    Renew(*data, datasize + 1, char);
-    (*data)[datasize] = '\0';
-    *size = datasize;
-
-    PerlIO_seek(fhandle, pos, SEEK_SET);
-
-    return 0;
-}
-
-static int
-fmm_slurp_file(fmmstate *state, char *file, char **data, int *size)
-{
-    PerlIO *fhandle;
-    int   datasize;
-    int   ret;
-    SV *err;
-    
-    fhandle = PerlIO_open(file, "r");
-    if (! fhandle) {
-        err = newSVpvf(
-            "Failed to open %s: %s", file, strerror(errno));
-        FMM_SET_ERROR(state, err);
-        PerlIO_close(fhandle);
-        return -1;
-    }
-    ret = fmm_slurp_fh(fhandle, data, size);
-    PerlIO_close(fhandle);
-    return ret;
 }
 
 #define isODIGIT(c) (((unsigned char)(c) >= '0') && ((unsigned char)(c) <= '7'))
@@ -1282,6 +1234,7 @@ fmm_parse_magic_file(fmmstate *state, char *file)
     PerlIO *fhandle;
     SV *err;
     SV *sv = sv_2mortal(newSV(BUFSIZ));
+    SV *PL_rs_orig = newSVsv(PL_rs);
     char *line;
 
     fhandle = PerlIO_open(file, "r");
@@ -1293,11 +1246,11 @@ fmm_parse_magic_file(fmmstate *state, char *file)
         return -1;
     }
 
-    /* parse it */
-    /* XXX - HACK HACK HACK HACK!!!! */
-    /* there is no fgets() in Perl, except for sv_gets() ... which is fine
-     * but it's seems a bit inefficient. Come back here when we can later.
+    /*
+     * Parse it line by line
+     * $/ (slurp mode) is needed here
      */
+    PL_rs = sv_2mortal(newSVpvn("\n", 1));
     for(lineno = 1; sv_gets(sv, fhandle, 0) != NULL; lineno++) {
         line = SvPV_nolen(sv);
         /* delete newline */
@@ -1325,6 +1278,7 @@ fmm_parse_magic_file(fmmstate *state, char *file)
         }
     }
     PerlIO_close(fhandle);
+    PL_rs = PL_rs_orig;
 
     return 1;
 }
@@ -1390,7 +1344,6 @@ fmm_fsmagic(fmmstate *state, char *filename, char **mime_type)
 {
     struct stat sb;
     SV *err;
-    char *p;
 
     if (stat(filename, &sb) == -1) {
         err = newSVpvf(
@@ -1484,12 +1437,11 @@ fmm_softmagic(fmmstate *state, unsigned char **buf, int size, char **mime_type)
     int need_separator = 0;
     union VALUETYPE p;
     fmmagic *m_cont;
-    int count = 0;
     fmmagic *m = state->magic;
 
     for (; m; m = m->next) {
         /* check if main entry matches */
-        if (! fmm_mget(state, &p, *buf, m, size, mime_type) || !fmm_mcheck(state, &p, m)) {
+        if (! fmm_mget(state, &p, *buf, m, size) || !fmm_mcheck(state, &p, m)) {
             /* main entry didn't match, flush its continuations */
             if (! m->next || (m->next->cont_level == 0)) {
                 continue;
@@ -1529,7 +1481,7 @@ fmm_softmagic(fmmstate *state, unsigned char **buf, int size, char **mime_type)
                     cont_level = m->cont_level;
                 }
 
-                if (fmm_mget(state, &p, *buf, m, size, mime_type) && fmm_mcheck(state, &p, m)) {
+                if (fmm_mget(state, &p, *buf, m, size) && fmm_mcheck(state, &p, m)) {
                     /* This continuation matched. Print its message, with a
                      * blank before it if the previous item printed and this
                      * isn't empty.
@@ -1607,6 +1559,7 @@ static int
 fmm_ext_magic(fmmstate *state, char *file, char **mime_type)
 {
     char ext[BUFSIZ];
+    char *temp_mimetype;
     /* Look for the last dot */
     char *dot = rindex(file, '.');
     if (dot == 0x00) {
@@ -1614,9 +1567,10 @@ fmm_ext_magic(fmmstate *state, char *file, char **mime_type)
     }
 
     strncpy(ext, dot + 1, BUFSIZ);
-    if (st_lookup(state->ext, (st_data_t) ext, (st_data_t *) mime_type) == 0) {
+    if (st_lookup(state->ext, (st_data_t) ext, (st_data_t *) &temp_mimetype) == 0) {
         return 1;
     }
+    strncpy(*mime_type, temp_mimetype, MAXMIMESTRING);
     return 0;
 }
 
@@ -1654,6 +1608,39 @@ fmm_mime_magic(fmmstate *state, char *file, char **mime_type)
     return fmm_ext_magic(state, file, mime_type);
 }
 
+static SV *
+FMM_create(char *class, char *magic_file) {
+    fmmstate *state;
+    SV       *sv;
+    MAGIC    *mg;
+
+    Newz(1234, state, 1, fmmstate);
+    state->magic = NULL;
+    state->error = NULL;
+    state->ext   = st_init_strtable();
+
+    /*
+     * Add a perl magic pointer to the state structure
+     * to free it automatically after use.
+     */
+    sv = newSViv(PTR2IV(state));
+    sv_magic(sv, 0, '~', 0, 0);
+    mg = mg_find(sv, '~');
+    assert(mg);
+    mg->mg_virtual = &vtbl_fmm_free_state;
+
+    sv = newRV_noinc(sv);
+    sv_bless(sv, gv_stashpv(class, 1));
+    SvREADONLY_on(sv);
+
+    if (magic_file != NULL) {
+        if (!fmm_parse_magic_file(state, magic_file))
+            croak("Could not parse magic file %s", magic_file);
+    }
+    return sv;
+}
+
+
 MODULE = File::MMagic::XS       PACKAGE = File::MMagic::XS
 
 PROTOTYPES: ENABLE
@@ -1662,31 +1649,12 @@ SV *
 new(class, ...)
         SV *class;
     PREINIT:
-        fmmstate *state;
-        SV       *sv;
         SV       *mfile;
         SV       *mfile_name;
-        HV       *hv;
-        MAGIC    *mg;
         char     *magic_file;
     CODE:
         if (SvROK(class))
             croak("Cannot call new() on a reference");
-
-        Newz(1234, state, 1, fmmstate);
-        state->magic = NULL;
-        state->error = NULL;
-        state->ext   = st_init_strtable();
-
-        sv = newSViv(PTR2IV(state));
-        sv_magic(sv, 0, '~', 0, 0);
-        mg = mg_find(sv, '~');
-        assert(mg);
-        mg->mg_virtual = &vtbl_fmm_free_state;
-
-        sv = newRV_noinc(sv);
-        sv_bless(sv, gv_stashpv(SvPV_nolen(class), 1));
-        SvREADONLY_on(sv);
 
         if (items > 1 && SvOK(ST(1))) {
             magic_file = SvPV_nolen(ST(1));
@@ -1702,10 +1670,36 @@ new(class, ...)
             magic_file = SvPV_nolen(mfile);
         }
 
-        if (!fmm_parse_magic_file(state, magic_file))
-            croak("Could not parse magic file %s", magic_file);
 
-        RETVAL = sv;
+        RETVAL = FMM_create(SvPV_nolen(class), magic_file);
+    OUTPUT:
+        RETVAL
+
+SV *
+clone(self)
+        SV *self;
+    PREINIT:
+        SV *clone;
+        fmmagic *d, *s;
+        fmmstate *state, *orig_state;
+    CODE:
+        clone = FMM_create( "File::MMagic::XS", NULL );
+        state = XS_STATE(fmmstate *, clone);
+        orig_state = XS_STATE(fmmstate *, self);
+        state->ext = st_copy( orig_state->ext );
+
+        s = orig_state->magic;
+        Newxz(d, 1, fmmagic);
+        memcpy(d, s, sizeof(struct _fmmagic));
+        state->magic = d;
+        while (s->next != NULL) {
+            Newxz(d->next, 1, fmmagic);
+            memcpy(d->next, s->next, sizeof(struct _fmmagic));
+            d = d->next;
+            s = s->next;
+        }
+        state->last = d;
+        RETVAL = clone;
     OUTPUT:
         RETVAL
 
@@ -1715,7 +1709,6 @@ parse_magic_file(self, file)
         SV *file;
     PREINIT:
         fmmstate *state;
-        SV       *sv;
         char     *filename;
         STRLEN    len;
     CODE:
@@ -1768,7 +1761,6 @@ fsmagic(self, filename)
     PREINIT:
         char *fn;
         char *type;
-        STRLEN len;
         fmmstate *state;
         int rc;
     CODE:
@@ -1794,7 +1786,6 @@ bufmagic(self, buf)
     PREINIT:
         unsigned char *buffer;
         char *type;
-        STRLEN len;
         fmmstate *state;
         int rc;
     CODE:
@@ -1849,7 +1840,6 @@ get_mime(self, filename)
     PREINIT:
         char *fn;
         char *type;
-        char *buf[HOWMANY + 1];
         fmmstate *state;
         int rc;
     CODE:
@@ -1917,9 +1907,11 @@ error(self)
         if (! FMM_OK(state))
             croak("Object not initialized.");
 
-        RETVAL = state->error == NULL ?
-            &PL_sv_undef :
-            SvREFCNT_inc(state->error);
+        if (state->error == NULL) {
+            RETVAL = newSV(0);
+        } else {
+            RETVAL = newSVsv(state->error);
+        }
     OUTPUT:
         RETVAL
 
