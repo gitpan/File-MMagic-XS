@@ -27,9 +27,10 @@ t/101_compat_extmagic.t
 t/data/picture.jpg
 t/data/test.rtf
 t/data/test.xml
-XS.bs
 xs/MMagic.xs
 xs/MMagicST.c
 xs/MMagicST.h
+xs/typemap
+xt/leak.t
 xt/pod-coverage.t
 xt/pod.t

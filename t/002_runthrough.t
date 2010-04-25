@@ -1,4 +1,4 @@
-#!perl
+# perl-test
 use strict;
 use Test::More;
 my %map;
@@ -10,7 +10,7 @@ BEGIN
         't/data/test.xml' => 'text/xml',
         't/data/test.rtf' => 'application/rtf'
     );
-    plan(tests => (scalar( keys %map ) * 4) * 2 + 1);
+    plan(tests => (scalar( keys %map ) * 5 + 1) * 2 + 1);
 }
 
 BEGIN
@@ -19,32 +19,30 @@ BEGIN
 }
 
 
-my $fm = File::MMagic::XS->new;
+foreach my $eol (undef, "\0") {
+    local $/ = $eol;
+    my $fm = File::MMagic::XS->new;
 
-while (my($file, $mime) = each %map) {
-    my $got = $fm->get_mime($file);
-    is($got, $mime, "$file: expected $mime");
+    while (my($file, $mime) = each %map) {
+        my $got = $fm->get_mime($file);
+        is($got, $mime, "$file: expected $mime");
 
-    ok(open(F, $file), "ok to open $file");
-    is($fm->fhmagic(\*F), $mime, "$file: expected $mime from fhmagic");
+        ok(open(F, $file), "ok to open $file");
+        is($fm->fhmagic(\*F), $mime, "$file: expected $mime from fhmagic");
 
-    seek(F, 0, 0);
-    my $buf = do { local $/ = undef; <F> };
-    my $ref = \$buf;
-    is($fm->bufmagic($ref), $mime, "$file: expected $mime from bufmagic");
-}
+        seek(F, 0, 0);
+        my $buf = do { local $/ = undef; <F> };
+        my $ref = \$buf;
+        is($fm->bufmagic($ref), $mime, "$file: expected $mime from bufmagic");
 
-while (my($file, $mime) = each %map) {
-    local $/ = "\0";
-    my $got = $fm->get_mime($file);
-    is($got, $mime, "$file: expected $mime");
+        if ( $mime eq 'text/plain' ) {
+            is( $fm->ascmagic( $buf ), $mime, "$file: expected $mime from ascmagic" );
+        } else {
+            ok( 1, "$file may be binary, skipping test" );
+        }
+    }
 
-    ok(open(F, $file), "ok to open $file");
-    is($fm->fhmagic(\*F), $mime, "$file: expected $mime from fhmagic");
-
-    seek(F, 0, 0);
-    my $buf = do { local $/ = undef; <F> };
-    my $ref = \$buf;
-    is($fm->bufmagic($ref), $mime, "$file: expected $mime from bufmagic");
+    $fm->add_magic( "0\tstring\t#\\ perl-test\tapplication/x-perl-test" );
+    is( $fm->get_mime( __FILE__ ), 'application/x-perl-test' );
 }
 
