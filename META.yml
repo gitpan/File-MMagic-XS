@@ -26,4 +26,4 @@ requires:
 resources:
   license: http://dev.perl.org/licenses/
   repository: git://github.com/lestrrat/File-MMagic-XS.git
-version: 0.09003_02
+version: 0.09003_03
