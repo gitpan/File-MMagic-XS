@@ -8,7 +8,7 @@ our $MAGIC_FILE;
 
 BEGIN
 {
-    $VERSION = '0.09004';
+    $VERSION = '0.09005';
     XSLoader::load(__PACKAGE__, $VERSION);
 
     require File::Spec;
@@ -42,7 +42,7 @@ sub new {
     my ($class, $magic_file) = @_;
     $magic_file ||= $MAGIC_FILE;
 
-    my $self = $class->create();
+    my $self = $class->_create();
     $self->parse_magic_file( $magic_file );
     return $self;
 }

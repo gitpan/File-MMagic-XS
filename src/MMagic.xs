@@ -75,19 +75,21 @@ static MGVTBL PerlFMM_vtbl = { /* for identity */
     NULL,  /* local */
 };
 
+#define PerlFMM__create PerlFMM_create
+
 MODULE = File::MMagic::XS   PACKAGE = File::MMagic::XS   PREFIX = PerlFMM_
 
 PROTOTYPES: ENABLE
 
 PerlFMM *
-PerlFMM_create(class_sv)
+PerlFMM__create(class_sv)
         SV *class_sv;
 
 PerlFMM *
 PerlFMM_clone(self)
         PerlFMM *self;
     PREINIT:
-        SV *class_sv;
+        SV *class_sv = ST(0);
 
 SV *
 PerlFMM_parse_magic_file(self, file)

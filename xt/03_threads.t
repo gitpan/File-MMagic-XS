@@ -1,6 +1,6 @@
 use strict;
 use Test::More;
-use threads;
+use Test::Requires 'threads';
 use_ok "File::MMagic::XS";
 
 my $x = File::MMagic::XS->new; 
